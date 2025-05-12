@@ -1,6 +1,6 @@
-fastapi
-uvicorn
-requests
-python-dotenv
-pydantic
-markdown
+fastapi==0.115.12
+uvicorn==0.34.2
+requests==2.26.0
+python-dotenv==1.1.0
+pydantic==2.9.2
+markdown==3.7
