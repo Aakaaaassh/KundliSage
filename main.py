@@ -10,8 +10,8 @@ from fastapi.responses import HTMLResponse
 from pathlib import Path
 from enum import Enum
 from pydantic import BaseModel
-import markdown  
-import re  
+import markdown  # For converting Markdown to HTML if needed
+import re  # For basic text processing
 
 
 
@@ -2776,10 +2776,10 @@ async def chat_prediction(
     current_mahadasha_full = fetch_current_mahadasha_full(api_key,kundli_params)
     shad_bala = fetch_shad_bala(api_key,kundli_params)
     current_sade_sati = fetch_current_sade_sati(api_key, kundli_params)
-    ashtakvarga = get_ashtakvarga(api_key,kundli_params)
-    binnashtakvarga = get_binnashtakvarga(api_key,kundli_params)
-    rudraksh_suggestion = get_rudraksh_suggestion(api_key,kundli_params)
-    gem_suggestions = get_gem_suggestion(api_key,kundli_params)
+    ashtakvarga = fetch_ashtakvarga(api_key,kundli_params)
+    binnashtakvarga = fetch_binnashtakvarga(api_key,kundli_params)
+    rudraksh_suggestion = fetch_rudraksh_suggestion(api_key,kundli_params)
+    gem_suggestions = fetch_gem_suggestion(api_key,kundli_params)
 
     # 2. Prepare the prompt for Perplexity
     prompt = (
