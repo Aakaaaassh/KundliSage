@@ -1,4 +1,6 @@
-from fastapi import FastAPI, HTTPException, Depends, Security, Query, Body
+from datetime import datetime, timedelta
+from pymongo import MongoClient
+from fastapi import FastAPI, HTTPException, Depends, Security, Query, Body, Request
 from fastapi.security import APIKeyHeader
 import requests
 import os
@@ -27,6 +29,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Connect to MongoDB
+mongo_uri = os.environ.get("MONGO_URI")
+client = MongoClient(mongo_uri)
+db = client["astrology_app"]
+sessions_collection = db["user_sessions"]
 
 # Custom StaticFiles class to disable caching
 class StaticFilesWithoutCaching(StaticFiles):
@@ -178,6 +186,8 @@ NAKSHATRA_MAPPING = {
 
 # List of Nakshatra names for dropdown in Swagger UI
 NAKSHATRA_NAMES = list(NAKSHATRA_MAPPING.keys())
+
+
 
 
 # Define Enum for week dropdown
@@ -2755,10 +2765,32 @@ async def get_western_match(
 
 @app.post("/chat/prediction")
 async def chat_prediction(
+    request: Request,
     data: ChatPredictionRequest,
     api_key: str = Depends(get_api_key)
 ):
-    # 1. Fetch Kundli data (planet details + personal characteristics for richer context)
+    # Check if manual refresh is requested via query parameter
+    manual_refresh = request.query_params.get("refresh", "false").lower() == "true"
+    
+    # Create a unique user identifier
+    user_key = f"{data.name}_{data.dob}_{data.tob}_{data.lat}_{data.lon}"
+    
+    # Check if we have stored data for this user
+    stored_data = sessions_collection.find_one({"user_key": user_key})
+    
+    # Determine if we need to refresh the data
+    needs_refresh = True
+    if stored_data and not manual_refresh:
+        # Check when the data was last updated
+        last_updated = stored_data.get("last_updated")
+        if last_updated:
+            # Calculate age of data
+            data_age = datetime.now() - last_updated
+            # Only refresh if older than 24 hours
+            if data_age < timedelta(hours=24):
+                needs_refresh = False
+    
+    # Prepare kundli parameters
     kundli_params = {
         "dob": data.dob,
         "tob": data.tob,
@@ -2767,41 +2799,66 @@ async def chat_prediction(
         "tz": data.tz,
         "lang": data.lang
     }
-    planet_details = fetch_planet_details(api_key, kundli_params)
-    personal_chars = fetch_personal_characteristics(api_key, kundli_params)
-    mangal_dosh = fetch_mangal_dosha(api_key,kundli_params)
-    kaalsarp_dosh = fetch_kaalsarp_dosha(api_key,kundli_params)
-    manglik_dosh = fetch_manglik_dosha(api_key,kundli_params)
-    pitra_dosh = fetch_pitra_dosha(api_key,kundli_params)
-    current_mahadasha_full = fetch_current_mahadasha_full(api_key,kundli_params)
-    shad_bala = fetch_shad_bala(api_key,kundli_params)
-    current_sade_sati = fetch_current_sade_sati(api_key, kundli_params)
-    ashtakvarga = fetch_ashtakvarga(api_key,kundli_params)
-    binnashtakvarga = fetch_binnashtakvarga(api_key,kundli_params)
-    rudraksh_suggestion = fetch_rudraksh_suggestion(api_key,kundli_params)
-    gem_suggestions = fetch_gem_suggestion(api_key,kundli_params)
-
-    # 2. Prepare the prompt for Perplexity
+    
+    if needs_refresh:
+        try:
+            # Fetch fresh data from APIs
+            astrological_data = {
+                "planet_details": fetch_planet_details(api_key, kundli_params),
+                "personal_chars": fetch_personal_characteristics(api_key, kundli_params),
+                "mangal_dosh": fetch_mangal_dosha(api_key, kundli_params),
+                "kaalsarp_dosh": fetch_kaalsarp_dosha(api_key, kundli_params),
+                "manglik_dosh": fetch_manglik_dosha(api_key, kundli_params),
+                "pitra_dosh": fetch_pitra_dosha(api_key, kundli_params),
+                "current_mahadasha_full": fetch_current_mahadasha_full(api_key, kundli_params),
+                "shad_bala": fetch_shad_bala(api_key, kundli_params),
+                "current_sade_sati": fetch_current_sade_sati(api_key, kundli_params),
+                "ashtakvarga": fetch_ashtakvarga(api_key, kundli_params),
+                "binnashtakvarga": fetch_binnashtakvarga(api_key, kundli_params),
+                "rudraksh_suggestion": fetch_rudraksh_suggestion(api_key, kundli_params),
+                "gem_suggestions": fetch_gem_suggestion(api_key, kundli_params)
+            }
+            
+            # Store in database with current timestamp
+            sessions_collection.update_one(
+                {"user_key": user_key},
+                {"$set": {
+                    "user_key": user_key,
+                    "astrological_data": astrological_data,
+                    "last_updated": datetime.now()
+                }},
+                upsert=True
+            )
+        except Exception as e:
+            # If fetching new data fails but we have stored data, use it
+            if stored_data:
+                astrological_data = stored_data["astrological_data"]
+            else:
+                raise HTTPException(status_code=500, detail=f"Failed to fetch astrological data: {str(e)}")
+    else:
+        # Use cached data from database
+        astrological_data = stored_data["astrological_data"]
+    
+    # Prepare the prompt for Perplexity
     prompt = (
         f"User: {data.name}\n"
-        f"Kundli Planet Details: {planet_details.get('response', {})}\n"
-        f"Personal Characteristics: {personal_chars.get('response', {})}\n"
-        f"Mangal Dosh: {mangal_dosh.get('response', {})}\n"
-        f"Kaalsarp Dosh: {kaalsarp_dosh.get('response', {})}\n"
-        f"Manglik Dosh: {manglik_dosh.get('response', {})}\n"
-        f"Pitra Dosh: {pitra_dosh.get('response', {})}\n"
-        f"Current Maha Dasha Full: {current_mahadasha_full.get('response', {})}\n"
-        f"Shada Bala: {shad_bala.get('response', {})}\n"
-        f"Current Sade Sati: {current_sade_sati.get('response', {})}\n"
-        f"Ashtakvarga: {ashtakvarga.get('response', {})}\n"
-        f"binnashtakvarga: {binnashtakvarga.get('response', {})}\n"
-        f"Rudraksh Suggestion: {rudraksh_suggestion.get('response', {})}\n"
-        f"Gem Suggestion: {gem_suggestions.get('response', {})}\n"
+        f"Kundli Planet Details: {astrological_data.get('planet_details', {}).get('response', {})}\n"
+        f"Personal Characteristics: {astrological_data.get('personal_chars', {}).get('response', {})}\n"
+        f"Mangal Dosh: {astrological_data.get('mangal_dosh', {}).get('response', {})}\n"
+        f"Kaalsarp Dosh: {astrological_data.get('kaalsarp_dosh', {}).get('response', {})}\n"
+        f"Manglik Dosh: {astrological_data.get('manglik_dosh', {}).get('response', {})}\n"
+        f"Pitra Dosh: {astrological_data.get('pitra_dosh', {}).get('response', {})}\n"
+        f"Current Maha Dasha Full: {astrological_data.get('current_mahadasha_full', {}).get('response', {})}\n"
+        f"Shada Bala: {astrological_data.get('shad_bala', {}).get('response', {})}\n"
+        f"Current Sade Sati: {astrological_data.get('current_sade_sati', {}).get('response', {})}\n"
+        f"Ashtakvarga: {astrological_data.get('ashtakvarga', {}).get('response', {})}\n"
+        f"binnashtakvarga: {astrological_data.get('binnashtakvarga', {}).get('response', {})}\n"
+        f"Rudraksh Suggestion: {astrological_data.get('rudraksh_suggestion', {}).get('response', {})}\n"
+        f"Gem Suggestion: {astrological_data.get('gem_suggestions', {}).get('response', {})}\n"
         f"User Query: {data.query}\n"
-
     )
 
-    # 3. Call Perplexity API
+    # Call Perplexity API
     headers = {
         "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
         "Content-Type": "application/json"
@@ -2813,19 +2870,23 @@ async def chat_prediction(
             {"role": "user", "content": prompt}
         ]
     }
-    resp = requests.post(
-        "https://api.perplexity.ai/chat/completions",
-        json=payload,
-        headers=headers,
-        timeout=300
-    )
-    if resp.status_code != 200:
-        raise HTTPException(status_code=500, detail=f"Perplexity API error: {resp.text}")
-    result = resp.json()
+    
     try:
-        answer = result["choices"][0]["message"]["content"]
-    except Exception:
-        answer = result
+        resp = requests.post(
+            "https://api.perplexity.ai/chat/completions",
+            json=payload,
+            headers=headers,
+            timeout=300
+        )
+        if resp.status_code != 200:
+            raise HTTPException(status_code=500, detail=f"Perplexity API error: {resp.text}")
+        result = resp.json()
+        try:
+            answer = result["choices"][0]["message"]["content"]
+        except Exception:
+            answer = result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get prediction: {str(e)}")
 
     return {
         "prediction": answer
