@@ -10,8 +10,8 @@ from fastapi.responses import HTMLResponse
 from pathlib import Path
 from enum import Enum
 from pydantic import BaseModel
-import markdown  # For converting Markdown to HTML if needed
-import re  # For basic text processing
+import markdown  
+import re  
 
 
 
@@ -2769,14 +2769,36 @@ async def chat_prediction(
     }
     planet_details = fetch_planet_details(api_key, kundli_params)
     personal_chars = fetch_personal_characteristics(api_key, kundli_params)
+    mangal_dosh = fetch_mangal_dosha(api_key,kundli_params)
+    kaalsarp_dosh = fetch_kaalsarp_dosha(api_key,kundli_params)
+    manglik_dosh = fetch_manglik_dosha(api_key,kundli_params)
+    pitra_dosh = fetch_pitra_dosha(api_key,kundli_params)
+    current_mahadasha_full = fetch_current_mahadasha_full(api_key,kundli_params)
+    shad_bala = fetch_shad_bala(api_key,kundli_params)
+    current_sade_sati = fetch_current_sade_sati(api_key, kundli_params)
+    ashtakvarga = get_ashtakvarga(api_key,kundli_params)
+    binnashtakvarga = get_binnashtakvarga(api_key,kundli_params)
+    rudraksh_suggestion = get_rudraksh_suggestion(api_key,kundli_params)
+    gem_suggestions = get_gem_suggestion(api_key,kundli_params)
 
     # 2. Prepare the prompt for Perplexity
     prompt = (
         f"User: {data.name}\n"
         f"Kundli Planet Details: {planet_details.get('response', {})}\n"
         f"Personal Characteristics: {personal_chars.get('response', {})}\n"
+        f"Mangal Dosh: {mangal_dosh.get('response', {})}\n"
+        f"Kaalsarp Dosh: {kaalsarp_dosh.get('response', {})}\n"
+        f"Manglik Dosh: {manglik_dosh.get('response', {})}\n"
+        f"Pitra Dosh: {pitra_dosh.get('response', {})}\n"
+        f"Current Maha Dasha Full: {current_mahadasha_full.get('response', {})}\n"
+        f"Shada Bala: {shad_bala.get('response', {})}\n"
+        f"Current Sade Sati: {current_sade_sati.get('response', {})}\n"
+        f"Ashtakvarga: {ashtakvarga.get('response', {})}\n"
+        f"binnashtakvarga: {binnashtakvarga.get('response', {})}\n"
+        f"Rudraksh Suggestion: {rudraksh_suggestion.get('response', {})}\n"
+        f"Gem Suggestion: {gem_suggestions.get('response', {})}\n"
         f"User Query: {data.query}\n"
-        f"Give an expert Vedic astrology prediction in simple language."
+
     )
 
     # 3. Call Perplexity API
@@ -2810,8 +2832,3 @@ async def chat_prediction(
     }
 
 # Run the app with: uvicorn main:app --reload
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-    
