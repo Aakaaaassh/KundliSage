@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from pymongo import MongoClient
-from fastapi import FastAPI, HTTPException, Depends, Security, Query, Body, Request
+from fastapi import FastAPI, HTTPException, Depends, Security, Query, Body, Request, Response
 from fastapi.security import APIKeyHeader
 import requests
 import os
@@ -8,12 +8,14 @@ from dotenv import load_dotenv
 from enum import Enum
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pathlib import Path
 from enum import Enum
 from pydantic import BaseModel
+from uuid import uuid4
 import markdown  # For converting Markdown to HTML if needed
 import re  # For basic text processing
+
 
 
 
@@ -35,6 +37,7 @@ mongo_uri = os.environ.get("MONGO_URI")
 client = MongoClient(mongo_uri)
 db = client["astrology_app"]
 sessions_collection = db["user_sessions"]
+user_chat_sessions = db["chat_sessions"]  # New collection for chat session data
 
 # Custom StaticFiles class to disable caching
 class StaticFilesWithoutCaching(StaticFiles):
@@ -43,7 +46,7 @@ class StaticFilesWithoutCaching(StaticFiles):
 
 
 # Mount static files with caching disabled
-app.mount("/static", StaticFilesWithoutCaching(directory=Path("static"), html=True), name="static")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Retrieve the API key from environment variables
 API_KEY = os.environ.get("API_KEY", "")
@@ -1100,10 +1103,21 @@ def fetch_western_match(api_key: str, params: dict):
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_chat_html():
-    with open("static/final.html", "r") as file:
+    with open("static/tryfinal.html", "r") as file:
         html_content = file.read()
     return HTMLResponse(content=html_content, status_code=200)
 
+@app.get("/chat.html", response_class=HTMLResponse)
+async def get_chat_page():
+    with open("static/chat.html", "r") as file:
+        return file.read()
+
+@app.post("/save_details")
+async def save_details(request: Request):
+    data = await request.json()
+    # Here, you can process or store the data (e.g., save to a database)
+    print("Received data:", data)  # For debugging
+    return JSONResponse(content={"message": "Details saved successfully"}, status_code=200)
 
 
 @app.get("/geo-search")
@@ -2765,112 +2779,161 @@ async def get_western_match(
 
 @app.post("/chat/prediction")
 async def chat_prediction(
-    request: Request,
     data: ChatPredictionRequest,
+    request: Request,
+    response: Response,
     api_key: str = Depends(get_api_key)
 ):
-    # Check if manual refresh is requested via query parameter
-    manual_refresh = request.query_params.get("refresh", "false").lower() == "true"
+    # Check for session ID in cookies
+    session_id = request.cookies.get("chat_session_id")
+    if not session_id:
+        # Generate a new session ID if none exists
+        session_id = str(uuid4())
+        response.set_cookie(
+            key="chat_session_id",
+            value=session_id,
+            httponly=True,
+            secure=False,  # Set to True in production with HTTPS
+            max_age=86400  # 24 hours expiration
+        )
     
-    # Create a unique user identifier
-    user_key = f"{data.name}_{data.dob}_{data.tob}_{data.lat}_{data.lon}"
+    # Check if session data exists in MongoDB
+    session_data = user_chat_sessions.find_one({"session_id": session_id})
     
-    # Check if we have stored data for this user
-    stored_data = sessions_collection.find_one({"user_key": user_key})
-    
-    # Determine if we need to refresh the data
-    needs_refresh = True
-    if stored_data and not manual_refresh:
-        # Check when the data was last updated
-        last_updated = stored_data.get("last_updated")
-        if last_updated:
-            # Calculate age of data
-            data_age = datetime.now() - last_updated
-            # Only refresh if older than 24 hours
-            if data_age < timedelta(hours=24):
-                needs_refresh = False
-    
-    # Prepare kundli parameters
-    kundli_params = {
-        "dob": data.dob,
-        "tob": data.tob,
-        "lat": data.lat,
-        "lon": data.lon,
-        "tz": data.tz,
-        "lang": data.lang
-    }
-    
-    if needs_refresh:
-        try:
-            # Fetch fresh data from APIs
-            astrological_data = {
-                "planet_details": fetch_planet_details(api_key, kundli_params),
-                "personal_chars": fetch_personal_characteristics(api_key, kundli_params),
-                "mangal_dosh": fetch_mangal_dosha(api_key, kundli_params),
-                "kaalsarp_dosh": fetch_kaalsarp_dosha(api_key, kundli_params),
-                "manglik_dosh": fetch_manglik_dosha(api_key, kundli_params),
-                "pitra_dosh": fetch_pitra_dosha(api_key, kundli_params),
-                "current_mahadasha_full": fetch_current_mahadasha_full(api_key, kundli_params),
-                "shad_bala": fetch_shad_bala(api_key, kundli_params),
-                "current_sade_sati": fetch_current_sade_sati(api_key, kundli_params),
-                "ashtakvarga": fetch_ashtakvarga(api_key, kundli_params),
-                "binnashtakvarga": fetch_binnashtakvarga(api_key, kundli_params),
-                "rudraksh_suggestion": fetch_rudraksh_suggestion(api_key, kundli_params),
-                "gem_suggestions": fetch_gem_suggestion(api_key, kundli_params)
-            }
-            
-            # Store in database with current timestamp
-            sessions_collection.update_one(
-                {"user_key": user_key},
-                {"$set": {
-                    "user_key": user_key,
-                    "astrological_data": astrological_data,
-                    "last_updated": datetime.now()
-                }},
-                upsert=True
-            )
-        except Exception as e:
-            # If fetching new data fails but we have stored data, use it
-            if stored_data:
-                astrological_data = stored_data["astrological_data"]
-            else:
-                raise HTTPException(status_code=500, detail=f"Failed to fetch astrological data: {str(e)}")
+    if not session_data:
+        # Fetch astrological data (as in your current logic)
+        user_key = f"{data.name}_{data.dob}_{data.tob}_{data.lat}_{data.lon}"
+        stored_data = sessions_collection.find_one({"user_key": user_key})
+        needs_refresh = True
+        data_age = None
+        
+        if stored_data:
+            last_updated = stored_data.get("last_updated")
+            if last_updated:
+                data_age = datetime.now() - last_updated
+                if data_age < timedelta(hours=24):
+                    needs_refresh = False
+        
+        kundli_params = {
+            "dob": data.dob,
+            "tob": data.tob,
+            "lat": data.lat,
+            "lon": data.lon,
+            "tz": data.tz,
+            "lang": data.lang
+        }
+        
+        if needs_refresh:
+            try:
+                if not stored_data:  # New user, fetch all data
+                    astrological_data = {
+                    "planet_details": fetch_planet_details(api_key, kundli_params),
+                    "personal_chars": fetch_personal_characteristics(api_key, kundli_params),
+                    "mangal_dosh": fetch_mangal_dosha(api_key, kundli_params),
+                    "kaalsarp_dosh": fetch_kaalsarp_dosha(api_key, kundli_params),
+                    "manglik_dosh": fetch_manglik_dosha(api_key, kundli_params),
+                    "pitra_dosh": fetch_pitra_dosha(api_key, kundli_params),
+                    "current_mahadasha_full": fetch_current_mahadasha_full(api_key, kundli_params),
+                    "shad_bala": fetch_shad_bala(api_key, kundli_params),
+                    "current_sade_sati": fetch_current_sade_sati(api_key, kundli_params),
+                    "ashtakvarga": fetch_ashtakvarga(api_key, kundli_params),
+                    "binnashtakvarga": fetch_binnashtakvarga(api_key, kundli_params),
+                    "rudraksh_suggestion": fetch_rudraksh_suggestion(api_key, kundli_params),
+                    "gem_suggestions": fetch_gem_suggestion(api_key, kundli_params)
+                }
+                else:
+                    astrological_data = stored_data["astrological_data"]
+                    if data_age >= timedelta(days=7):
+                        astrological_data.update({
+                            "planet_details": fetch_planet_details(api_key, kundli_params),
+                            "personal_chars": fetch_personal_characteristics(api_key, kundli_params),
+                            "current_mahadasha_full": fetch_current_mahadasha_full(api_key, kundli_params),
+                            "current_sade_sati": fetch_current_sade_sati(api_key, kundli_params)
+                            # Update other fields as needed
+                        })
+                    elif data_age >= timedelta(hours=24):
+                        astrological_data.update({
+                            "planet_details": fetch_planet_details(api_key, kundli_params),
+                            "personal_chars": fetch_personal_characteristics(api_key, kundli_params)
+                        })
+                
+                # Update database
+                sessions_collection.update_one(
+                    {"user_key": user_key},
+                    {"$set": {
+                        "user_key": user_key,
+                        "astrological_data": astrological_data,
+                        "last_updated": datetime.now()
+                    }},
+                    upsert=True
+                )
+            except Exception as e:
+                if stored_data:
+                    astrological_data = stored_data["astrological_data"]
+                else:
+                    raise HTTPException(status_code=500, detail=f"Failed to fetch astrological data: {str(e)}")
+        else:
+            astrological_data = stored_data["astrological_data"]
+        
+        # Initialize conversation history with system message and initial user data
+        initial_prompt = (
+            f"User: {data.name}\n"
+            f"Kundli Planet Details: {astrological_data.get('planet_details', {}).get('response', {})}\n"
+            f"Personal Characteristics: {astrological_data.get('personal_chars', {}).get('response', {})}\n"
+            f"Mangal Dosh: {astrological_data.get('mangal_dosh', {}).get('response', {})}\n"
+            f"Kaalsarp Dosh: {astrological_data.get('kaalsarp_dosh', {}).get('response', {})}\n"
+            f"Manglik Dosh: {astrological_data.get('manglik_dosh', {}).get('response', {})}\n"
+            f"Pitra Dosh: {astrological_data.get('pitra_dosh', {}).get('response', {})}\n"
+            f"Current Maha Dasha Full: {astrological_data.get('current_mahadasha_full', {}).get('response', {})}\n"
+            f"Shada Bala: {astrological_data.get('shad_bala', {}).get('response', {})}\n"
+            f"Current Sade Sati: {astrological_data.get('current_sade_sati', {}).get('response', {})}\n"
+            f"Ashtakvarga: {astrological_data.get('ashtakvarga', {}).get('response', {})}\n"
+            f"binnashtakvarga: {astrological_data.get('binnashtakvarga', {}).get('response', {})}\n"
+            f"Rudraksh Suggestion: {astrological_data.get('rudraksh_suggestion', {}).get('response', {})}\n"
+            f"Gem Suggestion: {astrological_data.get('gem_suggestions', {}).get('response', {})}\n"
+            f"User Query: {data.query}\n"
+            f"Give an expert Vedic astrology prediction in simple language. Do not use hashtags (#), asterisks (*), or any other markdown syntax. Avoid including links. "
+        )
+        conversation_history = [
+            {"role": "system", "content": "You are an expert Vedic astrologer. Provide your response in plain text format without any markdown formatting. Do not use hashtags (#), asterisks (*), or any other markdown syntax. Format your response in simple paragraphs with clean line breaks. Use bullet points with • symbol if needed, but avoid markdown formatting."},
+            {"role": "user", "content": initial_prompt}
+        ]
+        
+        # Store session data in MongoDB
+        user_chat_sessions.insert_one({
+            "session_id": session_id,
+            "user_key": user_key,
+            "astrological_data": astrological_data,
+            "conversation_history": conversation_history,
+            "created_at": datetime.now(),
+            "expires_at": datetime.now() + timedelta(hours=24)
+        })
     else:
-        # Use cached data from database
-        astrological_data = stored_data["astrological_data"]
+        # Retrieve existing conversation history
+        conversation_history = session_data["conversation_history"]
+        astrological_data = session_data["astrological_data"]
+        # Append only the new user query to the conversation history
+        conversation_history.append(
+            {"role": "user", "content": f"User Query: {data.query}"}
+        )
+        # Update the session in MongoDB
+        user_chat_sessions.update_one(
+            {"session_id": session_id},
+            {"$set": {
+                "conversation_history": conversation_history,
+                "last_updated": datetime.now()
+            }}
+        )
     
-    # Prepare the prompt for Perplexity
-    prompt = (
-        f"User: {data.name}\n"
-        f"Kundli Planet Details: {astrological_data.get('planet_details', {}).get('response', {})}\n"
-        f"Personal Characteristics: {astrological_data.get('personal_chars', {}).get('response', {})}\n"
-        f"Mangal Dosh: {astrological_data.get('mangal_dosh', {}).get('response', {})}\n"
-        f"Kaalsarp Dosh: {astrological_data.get('kaalsarp_dosh', {}).get('response', {})}\n"
-        f"Manglik Dosh: {astrological_data.get('manglik_dosh', {}).get('response', {})}\n"
-        f"Pitra Dosh: {astrological_data.get('pitra_dosh', {}).get('response', {})}\n"
-        f"Current Maha Dasha Full: {astrological_data.get('current_mahadasha_full', {}).get('response', {})}\n"
-        f"Shada Bala: {astrological_data.get('shad_bala', {}).get('response', {})}\n"
-        f"Current Sade Sati: {astrological_data.get('current_sade_sati', {}).get('response', {})}\n"
-        f"Ashtakvarga: {astrological_data.get('ashtakvarga', {}).get('response', {})}\n"
-        f"binnashtakvarga: {astrological_data.get('binnashtakvarga', {}).get('response', {})}\n"
-        f"Rudraksh Suggestion: {astrological_data.get('rudraksh_suggestion', {}).get('response', {})}\n"
-        f"Gem Suggestion: {astrological_data.get('gem_suggestions', {}).get('response', {})}\n"
-        f"User Query: {data.query}\n"
-    )
-
-    # Call Perplexity API
+    # Call Perplexity API with the full conversation history
     headers = {
         "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "sonar-pro",  # You can change to other models for testing
-        "messages": [
-            {"role": "system", "content": "You are an expert Vedic astrologer. Provide your response in plain text format without any markdown formatting. Do not use hashtags (#), asterisks (*), or any other markdown syntax. Format your response in simple paragraphs with clean line breaks. Use bullet points with • symbol if needed, but avoid markdown formatting."},
-            {"role": "user", "content": prompt}
-        ]
+        "model": "sonar-pro",
+        "messages": conversation_history
     }
-    
     try:
         resp = requests.post(
             "https://api.perplexity.ai/chat/completions",
@@ -2881,15 +2944,22 @@ async def chat_prediction(
         if resp.status_code != 200:
             raise HTTPException(status_code=500, detail=f"Perplexity API error: {resp.text}")
         result = resp.json()
-        try:
-            answer = result["choices"][0]["message"]["content"]
-        except Exception:
-            answer = result
+        answer = result["choices"][0]["message"]["content"]
+        
+        # Append AI response to conversation history in MongoDB
+        conversation_history.append(
+            {"role": "assistant", "content": answer}
+        )
+        user_chat_sessions.update_one(
+            {"session_id": session_id},
+            {"$set": {
+                "conversation_history": conversation_history,
+                "last_updated": datetime.now()
+            }}
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get prediction: {str(e)}")
-
-    return {
-        "prediction": answer
-    }
+    
+    return {"prediction": answer}
 
 # Run the app with: uvicorn main:app --reload
