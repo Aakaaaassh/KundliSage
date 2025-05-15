@@ -1103,7 +1103,7 @@ def fetch_western_match(api_key: str, params: dict):
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_chat_html():
-    with open("static/tryfinal.html", "r") as file:
+    with open("static/final.html", "r") as file:
         html_content = file.read()
     return HTMLResponse(content=html_content, status_code=200)
 
