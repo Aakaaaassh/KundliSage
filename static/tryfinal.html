@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>KundliSage</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600&display=swap" rel="stylesheet">
     <style>
@@ -20,44 +20,56 @@
             transition: all 0.3s ease;
             box-sizing: border-box;
         }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
         body {
             background: linear-gradient(to bottom, #000000, #1A1A1A);
             color: var(--text-primary);
             font-family: 'Plus Jakarta Sans', Arial, sans-serif;
-            margin: 0;
-            padding: 0;
+            padding: 20px;
+            max-width: 100%;
+            overflow-y: auto; /* Enable vertical scrolling */
+            overflow-x: auto;
             min-height: 100vh;
         }
 
         .container {
-            max-width: 800px;
+            max-width: 600px;
             margin: 0 auto;
-            padding: 24px;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
 
         h1, h2, h3 {
             color: var(--text-primary);
             font-weight: 600;
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            text-align: center;
         }
 
         input, select, textarea {
             background-color: var(--input-background);
             border: 1px solid var(--border-color);
-            border-radius: 16px;
+            border-radius: 4px;
             color: var(--text-primary);
-            padding: 12px 16px;
-            margin-bottom: 16px;
+            padding: 12px;
+            font-size: 1rem;
+            margin-bottom: 10px;
             width: 100%;
             font-family: 'Plus Jakarta Sans', Arial, sans-serif;
         }
 
         button {
             background-color: var(--input-background);
+            min-height: 48px;
             color: var(--text-primary);
             border: none;
-            border-radius: 16px;
-            padding: 12px 24px;
             font-weight: 600;
             cursor: pointer;
             transition: background-color 0.3s;
@@ -106,13 +118,14 @@
         }
 
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
 
         .form-group label {
             display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
+            font-size: 1rem;
+            margin-bottom: 5px;
+            font-weight: 600    ;
         }
 
         .timezone-options, .language-options {
@@ -335,9 +348,27 @@
             font-weight: 600;
             text-align: center;
         }
-
+        html, body {
+            overflow-x: hidden;
+        }
         .save-button:hover {
             background-color: #A0A0A7;
+        }
+        @media screen and (max-width: 480px) {
+            body {
+                padding: 10px;
+                overflow-y: auto; /* Reinforce vertical scrolling on mobile */
+            }
+            .container {
+                padding: 15px;
+            }
+            h1 {
+                font-size: 1.25rem;
+            }
+            input, select, button {
+                font-size: 0.9rem;
+                padding: 10px;
+            }
         }
     </style>
 </head>
