@@ -46,7 +46,7 @@ class StaticFilesWithoutCaching(StaticFiles):
 
 
 # Mount static files with caching disabled
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFilesWithoutCaching(directory=Path("static"), html=True), name="static")
 
 # Retrieve the API key from environment variables
 API_KEY = os.environ.get("API_KEY", "")
@@ -1107,17 +1107,6 @@ async def serve_chat_html():
         html_content = file.read()
     return HTMLResponse(content=html_content, status_code=200)
 
-@app.get("/chat.html", response_class=HTMLResponse)
-async def get_chat_page():
-    with open("static/chat.html", "r") as file:
-        return file.read()
-
-@app.post("/save_details")
-async def save_details(request: Request):
-    data = await request.json()
-    # Here, you can process or store the data (e.g., save to a database)
-    print("Received data:", data)  # For debugging
-    return JSONResponse(content={"message": "Details saved successfully"}, status_code=200)
 
 
 @app.get("/geo-search")
@@ -2961,5 +2950,6 @@ async def chat_prediction(
         raise HTTPException(status_code=500, detail=f"Failed to get prediction: {str(e)}")
     
     return {"prediction": answer}
+
 
 # Run the app with: uvicorn main:app --reload
