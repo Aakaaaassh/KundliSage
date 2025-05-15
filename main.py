@@ -1107,6 +1107,12 @@ async def serve_chat_html():
         html_content = file.read()
     return HTMLResponse(content=html_content, status_code=200)
 
+@app.get("/appointments.html", response_class=HTMLResponse)
+async def get_chat_page():
+    with open("static/appointments.html", "r") as file:
+        return file.read()
+
+
 
 
 @app.get("/geo-search")
