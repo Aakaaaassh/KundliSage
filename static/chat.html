@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KundliSage - Chat with AI</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Arial', sans-serif;
+            background-color: #121212;
+            color: #f5f5f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .chat-container {
+            width: 100%;
+            max-width: 1100px;
+            height: 80vh;
+            background-color: #1e1e1e;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #000000 transparent;
+        }
+        .message {
+            margin-bottom: 20px;
+            max-width: 80%;
+        }
+        .ai-message {
+            background-color: #2a2a2a;
+            padding: 10px 15px;
+            border-radius: 15px 15px 15px 5px;
+            color: #f5f5f5;
+        }
+        .user-message {
+            background-color: #ffffff;
+            padding: 10px 15px;
+            border-radius: 15px 15px 5px 15px;
+            color: #000000;
+            margin-left: auto;
+        }
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .chat-input-container {
+            padding: 15px;
+            border-top: 1px solid #333;
+            display: flex;
+            gap: 10px;
+            background-color: #1e1e1e;
+        }
+        #queryInput {
+            flex: 1;
+            height: 45px;
+            padding: 0 15px;
+            border: none;
+            border-radius: 25px;
+            background-color: #2a2a2a;
+            color: #f5f5f5;
+            font-size: 1rem;
+            outline: none;
+        }
+        #queryInput:focus {
+            outline: 2px solid #000000;
+        }
+        #sendBtn {
+            width: 45px;
+            height: 45px;
+            border: none;
+            border-radius: 50%;
+            background-color: #1b1b1b;
+            color: #f5f5f5;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background-color 0.2s ease;
+        }
+        #sendBtn:hover {
+            background-color: #000000;
+            box-shadow: 0 0 10px rgba(129, 129, 129, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-messages" id="chat-messages">
+            <div class="message ai-message">
+                Namaste! I'm your KundliSage assistant. I've received your birth details. You can now ask me questions about your birth chart and astrological insights.
+            </div>
+        </div>
+        <div class="chat-input-container">
+            <input type="text" id="queryInput" placeholder="Ask your question...">
+            <button id="sendBtn" class="send-chat-button">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M2.08801 1.082C1.49401 0.784999 0.835514 1.35 1.03851 1.9825L2.46751 6.424C2.49561 6.51131 2.54718 6.58921 2.61658 6.64918C2.68599 6.70915 2.77055 6.74887 2.86101 6.764L8.79551 7.7535C9.07401 7.8 9.07401 8.2 8.79551 8.2465L2.86151 9.2355C2.77096 9.25054 2.68629 9.29023 2.61679 9.3502C2.54729 9.41017 2.49565 9.48812 2.46751 9.5755L1.03851 14.0185C0.835014 14.651 1.49351 15.216 2.08801 14.919L14.585 8.6715C15.138 8.395 15.138 7.6065 14.585 7.3295L2.08801 1.082Z" fill="#F5F5F5"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Retrieve saved user data
+        const userData = JSON.parse(localStorage.getItem('userData')) || {};
+        console.log('User Data Retrieved:', userData);
+
+        function appendMessage(content, isUser) {
+            const chatMessages = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = isUser ? 'message user-message' : 'message ai-message';
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.innerHTML = content.replace(/\n/g, '<br>');
+            
+            messageDiv.appendChild(contentDiv);
+            chatMessages.appendChild(messageDiv);
+            
+            // Scroll to bottom
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        function appendLoadingMessage() {
+            const chatMessages = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message ai-message';
+            messageDiv.id = 'loading-message';
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            
+            const spinner = document.createElement('div');
+            spinner.className = 'spinner';
+            
+            contentDiv.appendChild(spinner);
+            contentDiv.appendChild(document.createTextNode('Analyzing your chart...'));
+            
+            messageDiv.appendChild(contentDiv);
+            chatMessages.appendChild(messageDiv);
+            
+            // Scroll to bottom
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        
+        function removeLoadingMessage() {
+            const loadingMessage = document.getElementById('loading-message');
+            if (loadingMessage) {
+                loadingMessage.remove();
+            }
+        }
+        
+        function sendQuery() {
+            const queryInput = document.getElementById('queryInput');
+            const query = queryInput.value.trim();
+            
+            console.log("Query value:", query);
+            if (!query) {
+                console.log("Query is empty, exiting function");
+                return;
+            }
+            
+            // Add user message to chat
+            appendMessage(query, true);
+            
+            // Clear input
+            queryInput.value = '';
+            
+            // Show loading message
+            appendLoadingMessage();
+            
+            // Format data for the prediction API using saved userData
+            let formattedDate = '';
+            let formattedTime = '';
+            if (userData.birthDateTime) {
+                const [datePart, timePart] = userData.birthDateTime.split('T');
+                if (datePart && timePart) {
+                    const [year, month, day] = datePart.split('-');
+                    formattedDate = `${day}/${month}/${year}`;
+                    formattedTime = timePart.substring(0, 5); // HH:MM format
+                }
+            }
+            
+            // Use the saved numeric tz value directly
+            let tzValue = userData.tz !== undefined ? userData.tz : 5.5; // Default to 5.5 if not found
+            console.log("Using timezone offset (tz):", tzValue);
+            
+            // Map language to a short code if needed
+            let langCode = 'en'; // Default
+            if (userData.language && userData.language.toLowerCase().includes('hindi')) {
+                langCode = 'hi';
+            } else if (userData.language) {
+                langCode = 'en'; // Default to English
+            }
+            
+            const predictionData = {
+                name: userData.name || 'User',
+                dob: formattedDate || '01/01/2000',
+                tob: formattedTime || '00:00',
+                lat: userData.latitude || '0',
+                lon: userData.longitude || '0',
+                tz: tzValue, // Use the saved numeric timezone offset strictly
+                lang: langCode,
+                query: query
+            };
+            
+            console.log("Sending data to API:", predictionData);
+            
+            // Send to prediction API
+            fetch('/chat/prediction', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(predictionData)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Remove loading message
+                removeLoadingMessage();
+                // Display the prediction
+                appendMessage(data.prediction || "Here's my response based on your chart.", false);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                removeLoadingMessage();
+                appendMessage("I'm sorry, I couldn't process your request at this time. Please try again later.", false);
+            });
+        }
+
+        // Attach sendQuery to button click and Enter key after DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("DOM loaded, attaching event listeners for send button");
+            const sendBtn = document.getElementById('sendBtn');
+            const queryInput = document.getElementById('queryInput');
+            
+            if (sendBtn) {
+                sendBtn.addEventListener('click', function() {
+                    console.log("Send button clicked");
+                    sendQuery();
+                });
+            } else {
+                console.error("Send button with ID 'sendBtn' not found");
+            }
+            
+            if (queryInput) {
+                queryInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        console.log("Enter key pressed");
+                        sendQuery();
+                    }
+                });
+            } else {
+                console.error("Query input with ID 'queryInput' not found");
+            }
+        });
+    </script>
+</body>
+</html>
