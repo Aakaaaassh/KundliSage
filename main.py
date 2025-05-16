@@ -2957,5 +2957,9 @@ async def chat_prediction(
     
     return {"prediction": answer}
 
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
 # Run the app with: uvicorn main:app --reload
